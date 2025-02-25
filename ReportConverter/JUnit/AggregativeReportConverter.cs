@@ -42,14 +42,15 @@ namespace ReportConverter.JUnit
     /// </summary>
     class AggregativeReportConverter : ConverterBase
     {
+
+        private const string SLASH = " / ";
+        private const string LOCALHOST = "localhost";
+
         public AggregativeReportConverter(CommandArguments args, IEnumerable<TestReportBase> testReports) : base(args)
         {
             TestSuites = new testsuites();
             TestReports = testReports;
-            if (TestReports == null)
-            {
-                TestReports = new List<TestReportBase>(0);
-            }
+            TestReports ??= [];
         }
 
         public IEnumerable<TestReportBase> TestReports { get; private set; }
@@ -63,7 +64,7 @@ namespace ReportConverter.JUnit
 
         public override bool Convert()
         {
-            List<testsuitesTestsuite> list = new List<testsuitesTestsuite>();
+            List<testsuitesTestsuite> list = [];
 
             int index = -1;
             foreach (TestReportBase testReport in this.TestReports)
@@ -114,13 +115,11 @@ namespace ReportConverter.JUnit
                 return null;
             }
 
-            testsuitesTestsuite ts = new testsuitesTestsuite();
+            testsuitesTestsuite ts = new();
             FillTestsuiteCommonData(ts, testReport, index);
 
             // JUnit testcases
-            int testcaseCount = 0;
-            int failureCount = 0;
-            ts.testcase = ConvertTestcases(testReport.AllStepsEnumerator, out testcaseCount, out failureCount);
+            ts.testcase = ConvertTestcases(testReport.AllStepsEnumerator, out int testcaseCount, out int failureCount);
             ts.tests = testcaseCount;
             ts.failures = failureCount;
 
@@ -133,10 +132,10 @@ namespace ReportConverter.JUnit
             count = 0;
             numOfFailures = 0;
 
-            List<testsuiteTestcase> list = new List<testsuiteTestcase>();
+            List<testsuiteTestcase> list = [];
             if (steps != null)
             {
-                EnumerableReportNodes<XmlReport.GUITest.StepReport> stepReports = new EnumerableReportNodes<XmlReport.GUITest.StepReport>(steps);
+                EnumerableReportNodes<XmlReport.GUITest.StepReport> stepReports = new(steps);
                 foreach (XmlReport.GUITest.StepReport step in stepReports)
                 {
                     testsuiteTestcase tc = GUITestReportConverter.ConvertTestcase(step, count);
@@ -146,7 +145,10 @@ namespace ReportConverter.JUnit
                     }
 
                     // update step name with the hierarchy full name
-                    tc.name = string.Format("#{0,7:0000000}: {1}", count + 1, GetHierarchyFullName(step));
+                    string stepFullName = GetHierarchyFullName(step);
+                    tc.name = string.Format("#{0,7:0000000}: {1}", count + 1, stepFullName);
+                    if (string.IsNullOrWhiteSpace(tc.classname))
+                        tc.classname = stepFullName;
 
                     list.Add(tc);
                     if (step.Status == ReportStatus.Failed)
@@ -161,7 +163,7 @@ namespace ReportConverter.JUnit
         }
 
         // For GUI test only
-        private static string GetHierarchyFullName(XmlReport.GUITest.StepReport stepReport, string split = " / ")
+        private static string GetHierarchyFullName(XmlReport.GUITest.StepReport stepReport)
         {
             string hierarchyName = stepReport.Name;
 
@@ -178,16 +180,15 @@ namespace ReportConverter.JUnit
                 else if (parentReport is XmlReport.GUITest.ActionIterationReport actionIterationReport)
                 {
                     // if it is GUI action iteration, prepend "Action Iteration" term
-                    name = string.Format("{0} {1}", Properties.Resources.PropName_ActionIteration, actionIterationReport.Index);
+                    name = $"{Properties.Resources.PropName_ActionIteration} {actionIterationReport.Index}";
                 }
                 else if (parentReport is XmlReport.GUITest.IterationReport iterationReport)
                 {
                     // if it is GUI iteration, prepend "Iteration" term
-                    name = string.Format("{0} {1}", Properties.Resources.PropName_Iteration, iterationReport.Index);
-                }
+                    name = $"{Properties.Resources.PropName_Iteration} {iterationReport.Index}";     }
 
                 // concat hierarchy name
-                hierarchyName = name + split + hierarchyName;
+                hierarchyName = name + SLASH + hierarchyName;
 
                 parentReport = parentReport.Owner as GeneralReportNode;
             }
@@ -205,13 +206,11 @@ namespace ReportConverter.JUnit
                 return null;
             }
 
-            testsuitesTestsuite ts = new testsuitesTestsuite();
+            testsuitesTestsuite ts = new();
             FillTestsuiteCommonData(ts, testReport, index);
 
             // JUnit testcases
-            int testcaseCount = 0;
-            int failureCount = 0;
-            ts.testcase = ConvertTestcases(testReport.Iterations, out testcaseCount, out failureCount);
+            ts.testcase = ConvertTestcases(testReport.Iterations, out int testcaseCount, out int failureCount);
             ts.tests = testcaseCount;
             ts.failures = failureCount;
 
@@ -224,7 +223,7 @@ namespace ReportConverter.JUnit
             count = 0;
             numOfFailures = 0;
 
-            List<testsuiteTestcase> list = new List<testsuiteTestcase>();
+            List<testsuiteTestcase> list = [];
             if (iterationReports != null)
             {
                 int iterationNum = 0;
@@ -234,7 +233,7 @@ namespace ReportConverter.JUnit
 
                     if (iteration.AllActivitiesEnumerator != null)
                     {
-                        EnumerableReportNodes<XmlReport.APITest.ActivityReport> activities = new EnumerableReportNodes<XmlReport.APITest.ActivityReport>(iteration.AllActivitiesEnumerator);
+                        EnumerableReportNodes<XmlReport.APITest.ActivityReport> activities = new(iteration.AllActivitiesEnumerator);
                         foreach (XmlReport.APITest.ActivityReport activity in activities)
                         {
                             testsuiteTestcase tc = APITestReportConverter.ConvertTestcase(activity, count);
@@ -261,7 +260,7 @@ namespace ReportConverter.JUnit
         }
 
         // For API test only
-        private static string GetHierarchyFullName(XmlReport.APITest.ActivityReport activityReport, int iterationNum, string split = " / ")
+        private static string GetHierarchyFullName(XmlReport.APITest.ActivityReport activityReport, int iterationNum)
         {
             string hierarchyName = activityReport.Name;
 
@@ -273,11 +272,10 @@ namespace ReportConverter.JUnit
                 if (parentReport is XmlReport.APITest.IterationReport iterationReport)
                 {
                     // if it is API iteration, prepend "Iteration" term
-                    name = string.Format("{0} {1}", Properties.Resources.PropName_Iteration, iterationNum);
-                }
+                    name = $"{Properties.Resources.PropName_Iteration} {iterationNum}";     }
 
                 // concat hierarchy name
-                hierarchyName = name + split + hierarchyName;
+                hierarchyName = name + SLASH + hierarchyName;
 
                 parentReport = parentReport.Owner as GeneralReportNode;
             }
@@ -295,13 +293,11 @@ namespace ReportConverter.JUnit
                 return null;
             }
 
-            testsuitesTestsuite ts = new testsuitesTestsuite();
+            testsuitesTestsuite ts = new();
             FillTestsuiteCommonData(ts, testReport, index);
 
             // JUnit testcases
-            int testcaseCount = 0;
-            int failureCount = 0;
-            ts.testcase = ConvertTestcases(testReport.AllBCsEnumerator, out testcaseCount, out failureCount);
+            ts.testcase = ConvertTestcases(testReport.AllBCsEnumerator, out int testcaseCount, out int failureCount);
             ts.tests = testcaseCount;
             ts.failures = failureCount;
 
@@ -314,7 +310,7 @@ namespace ReportConverter.JUnit
             count = 0;
             numOfFailures = 0;
 
-            List<testsuiteTestcase> list = new List<testsuiteTestcase>();
+            List<testsuiteTestcase> list = [];
             if (bcs != null)
             {
                 EnumerableReportNodes<XmlReport.BPT.BusinessComponentReport> bcReports = new EnumerableReportNodes<XmlReport.BPT.BusinessComponentReport>(bcs);
@@ -347,18 +343,16 @@ namespace ReportConverter.JUnit
                             count++;
                         }
                     }
-
-
                 }
             }
 
-            return list.ToArray();
+            return [.. list];
         }
 
         // For BPT test only
-        private static string GetHierarchyFullName(XmlReport.BPT.BCStepReport stepReport, XmlReport.BPT.BusinessComponentReport bc, string split = " / ")
+        private static string GetHierarchyFullName(XmlReport.BPT.BCStepReport stepReport, XmlReport.BPT.BusinessComponentReport bc)
         {
-            return BPTReportConverter.GetBCHierarchyName(bc) + split + stepReport.Name;
+            return BPTReportConverter.GetBCHierarchyName(bc) + SLASH + stepReport.Name;
         }
         #endregion
 
@@ -372,12 +366,12 @@ namespace ReportConverter.JUnit
             // other JUnit required fields
             ts.timestamp = testReport.TestRunStartTime;
             ts.hostname = testReport.HostName;
-            if (string.IsNullOrWhiteSpace(ts.hostname)) ts.hostname = "localhost";
+            if (string.IsNullOrWhiteSpace(ts.hostname)) ts.hostname = LOCALHOST;
             ts.time = testReport.TestDurationSeconds;
 
             // properties
-            List<testsuiteProperty> properties = new List<testsuiteProperty>(ConvertTestsuiteCommonProperties(testReport));
-            ts.properties = properties.ToArray();
+            List<testsuiteProperty> properties = new(ConvertTestsuiteCommonProperties(testReport));
+            ts.properties = [.. properties];
         }
 
         // For GUI / API / BPT tests
@@ -419,13 +413,13 @@ namespace ReportConverter.JUnit
                     string propValue = aut.Name;
                     if (!string.IsNullOrWhiteSpace(aut.Version))
                     {
-                        propValue += string.Format(" {0}", aut.Version);
+                        propValue += $" {aut.Version}";
                     }
                     if (!string.IsNullOrWhiteSpace(aut.Path))
                     {
-                        propValue += string.Format(" ({0})", aut.Path);
+                        propValue += $" {aut.Path}";
                     }
-                    yield return new testsuiteProperty(string.Format("{0} {1}", Properties.Resources.PropName_Prefix_AUT, i), propValue);
+                    yield return new testsuiteProperty($"{Properties.Resources.PropName_Prefix_AUT} {i}", propValue);
                 }
             }
         }
